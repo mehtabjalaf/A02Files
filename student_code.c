@@ -4,6 +4,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <semaphore.h>
 #include <time.h>
 
 void logStart(char* tID);//function to log that a new thread is started
@@ -12,6 +13,9 @@ void logFinish(char* tID);//function to log that a thread has finished its time
 void startClock();//function to start program clock
 long getCurrentTime();//function to check current time since clock was started
 time_t programClock;//the global timer/clock for the program
+
+sem_t sem_Even;
+sem_t sem_Odd; // global int semaphore pointers
 
 typedef struct thread //represents a single thread, you can add more members if required
 {
@@ -36,14 +40,60 @@ int main(int argc, char *argv[])
 	}
 
     //you can add some suitable code anywhere in main() if required
+	sem_init(&sem_Even, 0, 1);
+	sem_init(&sem_Odd, 0, 1);
 
-	startClock();
+	
 
 	Thread* threads = NULL;
 	int threadCount = readFile(argv[1],&threads);
 
 	startClock();
     //write some suitable code here to initiate, progress and terminate the threads following the requirements
+	int i;
+	for(i=0; i < threadCount; i++) 
+	{
+		if(atoi(threads[i].tid) % 2 == 0) 
+		{
+			threads[i].retVal = 0;
+		}
+		else 
+		{
+			threads[i].retVal =  1;
+		}
+	}
+
+	int maximum = threads[0].startTime;
+
+	for(i = 0; i < threadCount; i++) 
+	{
+		if(threads[i].startTime > maximum)
+		{
+			maximum = threads[i].startTime;
+		}
+	}
+
+	while(getCurrentTime() <= maximum)
+	{
+		for(i = 0; i < threadCount; i++)
+		{
+			if((threads[i].startTime == getCurrentTime()) && threads[i].state == 0) 
+			{
+				pthread_create(&threads[i].handle, NULL, &threadRun, &threads[i]);
+				threads[i].state = 1;
+				break;
+			}
+		}
+	}
+
+	for(i=0; i < threadCount; i++) 
+	{
+		pthread_join(threads[i].handle, NULL);
+	}
+
+	sem_destroy(&sem_Even);
+	sem_destroy(&sem_Odd);
+
 	return threadCount;
 }
 
@@ -130,11 +180,27 @@ void* threadRun(void* t)//implement this function in a suitable way
 {
 	logStart(((Thread*)t)->tid);
 	
-//your synchronization logic will appear here
+	//your synchronization logic will appear here
+	if(((Thread*)t) -> retVal == 0) 
+	{
+		sem_wait(&sem_Even);
+	}
+	else
+	{
+		sem_wait(&sem_Odd);
+	}
 
 	//critical section starts here, it has only the following printf statement
 	printf("[%ld] Thread %s is in its critical section\n",getCurrentTime(), ((Thread*)t)->tid);
 	//critical section ends here
+		if(((Thread*)t) -> retVal == 0) 
+	{
+		sem_wait(&sem_Odd);
+	}
+	else
+	{
+		sem_wait(&sem_Even);
+	}
 
 //your synchronization logic will appear here
 
